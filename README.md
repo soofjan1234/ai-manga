@@ -1,8 +1,11 @@
 # AI 漫剧 (AI-Manga)
 
-![AI Manga Logo](public/favicon.ico)
 
 AI 漫剧是一个基于 Google Gemini 3.0 模型驱动的**互动式全彩漫画创作平台**。通过结合文本生成与图像生成能力，用户可以仅通过文字描述，从零开始构建世界观、设定角色，并创作出具有连贯叙事的长篇漫画。
+
+## 📺 项目演示
+
+<video src="data/demo.MOV" controls width="100%"></video>
 
 ## 🌟 核心特性
 
