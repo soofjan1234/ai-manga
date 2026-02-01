@@ -61,7 +61,7 @@ export default function StoryTimeline({
     }
 
     return (
-        <div className="max-w-3xl mx-auto w-full pt-8 px-4 pb-20">
+        <div className="max-w-4xl mx-auto w-full pt-8 px-4 pb-20">
             {stories.map((story) => (
                 <StoryPanel
                     key={story.id}

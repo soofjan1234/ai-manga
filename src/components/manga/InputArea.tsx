@@ -3,11 +3,12 @@ import { useStory } from "@/lib/store";
 
 interface InputAreaProps {
     onGenerate: (prompt: string) => void;
+    onCancel?: () => void;
     isLoading: boolean;
     externalInput?: string;
 }
 
-export default function InputArea({ onGenerate, isLoading, externalInput }: InputAreaProps) {
+export default function InputArea({ onGenerate, onCancel, isLoading, externalInput }: InputAreaProps) {
     const { state } = useStory();
     const [input, setInput] = useState("");
     const [isPolishing, setIsPolishing] = useState(false);
@@ -121,24 +122,26 @@ export default function InputArea({ onGenerate, isLoading, externalInput }: Inpu
                 </button>
 
                 {/* 生成按钮 */}
-                <button
-                    onClick={handleSubmit}
-                    disabled={isActionDisabled}
-                    className={`
-                        h-[52px] px-6 min-w-[100px] flex items-center justify-center
-                        font-bold uppercase tracking-wider border-3 border-ink
-                        transition-all duration-150
-                        ${isActionDisabled
-                            ? "bg-gray-300 text-gray-500 border-gray-400 cursor-not-allowed shadow-none"
-                            : "bg-accent text-ink shadow-retro hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] active:translate-x-[4px] active:translate-y-[4px] cursor-pointer"}
-                    `}
-                >
-                    {isLoading ? (
-                        <span className="animate-pulse">生成中...</span>
-                    ) : (
-                        <span>生成</span>
-                    )}
-                </button>
+                <div className="relative">
+                    <button
+                        onClick={handleSubmit}
+                        disabled={isActionDisabled}
+                        className={`
+                            h-[52px] px-6 min-w-[100px] flex items-center justify-center
+                            font-bold uppercase tracking-wider border-3 border-ink
+                            transition-all duration-150
+                            ${isActionDisabled
+                                ? "bg-gray-300 text-gray-500 border-gray-400 cursor-not-allowed shadow-none"
+                                : "bg-accent text-ink shadow-retro hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] active:translate-x-[4px] active:translate-y-[4px] cursor-pointer"}
+                        `}
+                    >
+                        {isLoading ? (
+                            <span className="animate-pulse">生成中...</span>
+                        ) : (
+                            <span>生成</span>
+                        )}
+                    </button>
+                </div>
             </div>
         </div>
     );

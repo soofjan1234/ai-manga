@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useStory, Character } from "@/lib/store";
 import Image from "next/image";
@@ -29,38 +29,44 @@ const createEmptyDraft = (): CharacterDraft => ({
 
 export default function CharactersPage() {
   const router = useRouter();
-  const { state, setCharacters } = useStory();
+  const { state, setCharacters, setCharacterDrafts } = useStory();
+  const drafts = state.characterDrafts;
 
-  const [drafts, setDrafts] = useState<CharacterDraft[]>(
-    state.characters.length > 0
-      ? state.characters.map((c) => ({
-          id: c.id,
-          name: c.name,
-          description: c.description,
-          imageUrl: c.imageUrl || null,
-          isGenerating: false,
-          error: null,
-          editPrompt: "",
-        }))
-      : [createEmptyDraft()]
-  );
   const [isSuggestingAll, setIsSuggestingAll] = useState(false);
+
+  // 监听并自动同步到全局 Store，防止跳转丢失数据
+  useEffect(() => {
+    // If characterDrafts is empty, initialize it with one empty draft
+    // This ensures there's always at least one draft to start with
+    if (drafts.length === 0) {
+      setCharacterDrafts([createEmptyDraft()]);
+    }
+
+    const validCharacters: Character[] = drafts
+      .filter((d) => d.name) // 至少有名字才存
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        description: d.description,
+        imageUrl: d.imageUrl || undefined,
+      }));
+    setCharacters(validCharacters);
+  }, [drafts, setCharacters, setCharacterDrafts]);
 
   // 更新单个草稿
   const updateDraft = (id: string, updates: Partial<CharacterDraft>) => {
-    setDrafts((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, ...updates } : d))
-    );
+    const newDrafts = drafts.map((d) => (d.id === id ? { ...d, ...updates } : d));
+    setCharacterDrafts(newDrafts);
   };
 
   // 添加新角色
   const addDraft = () => {
-    setDrafts((prev) => [...prev, createEmptyDraft()]);
+    setCharacterDrafts([...drafts, createEmptyDraft()]);
   };
 
   // 删除角色
   const removeDraft = (id: string) => {
-    setDrafts((prev) => prev.filter((d) => d.id !== id));
+    setCharacterDrafts(drafts.filter((d) => d.id !== id));
   };
 
   // AI 建议角色（根据背景）
@@ -102,13 +108,25 @@ export default function CharactersPage() {
         })
       );
 
-      setDrafts(newDrafts);
+      setCharacterDrafts(newDrafts);
     } catch (error) {
       console.error("建议角色失败:", error);
       alert("生成角色建议失败，请重试");
     } finally {
       setIsSuggestingAll(false);
     }
+  };
+
+  const abortControllers = useRef<{ [key: string]: AbortController }>({});
+
+  // 取消生成
+  const handleCancel = (id: string) => {
+    if (abortControllers.current[id]) {
+      abortControllers.current[id].abort();
+      delete abortControllers.current[id];
+    }
+    // 复原原样，不显示错误
+    updateDraft(id, { isGenerating: false, error: null });
   };
 
   // 生成单个角色图像
@@ -119,6 +137,11 @@ export default function CharactersPage() {
       return;
     }
 
+    // 创建新的 AbortController
+    const controller = new AbortController();
+    abortControllers.current[id] = controller;
+
+    // 立即更新为生成中状态
     updateDraft(id, { isGenerating: true, error: null });
 
     try {
@@ -131,6 +154,7 @@ export default function CharactersPage() {
           description: draft.description,
           colorMode: "color",
         }),
+        signal: controller.signal,
       });
 
       const data = await response.json();
@@ -140,11 +164,17 @@ export default function CharactersPage() {
       }
 
       updateDraft(id, { imageUrl: data.imageUrl, isGenerating: false });
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === "AbortError") {
+        console.log("Generation aborted for", id);
+        return;
+      }
       updateDraft(id, {
         error: error instanceof Error ? error.message : "生成失败",
         isGenerating: false,
       });
+    } finally {
+      delete abortControllers.current[id];
     }
   };
 
@@ -283,43 +313,51 @@ export default function CharactersPage() {
                     )}
                   </div>
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => handleGenerate(draft.id)}
-                      disabled={draft.isGenerating}
-                      className="flex-1 px-3 py-2 bg-ink text-cream border-2 border-ink font-mono text-xs uppercase hover:bg-ink/80 transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      ↻ 重新生成
-                    </button>
+                    {draft.isGenerating ? (
+                      <button
+                        onClick={() => handleCancel(draft.id)}
+                        className="flex-1 px-3 py-2 bg-red-600 text-cream border-2 border-ink font-mono text-xs uppercase hover:bg-red-700 transition-colors cursor-pointer"
+                      >
+                        ✕ 取消
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleGenerate(draft.id)}
+                        className="flex-1 px-3 py-2 bg-ink text-cream border-2 border-ink font-mono text-xs uppercase hover:bg-ink/80 transition-colors cursor-pointer"
+                      >
+                        ↻ 重新生成
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
-                <button
-                  onClick={() => handleGenerate(draft.id)}
-                  disabled={draft.isGenerating || !draft.name || !draft.description}
-                  className={`
-                    w-full aspect-[4/3] border-3 border-dashed flex flex-col items-center justify-center gap-2
-                    font-mono text-sm uppercase transition-all cursor-pointer
-                    ${
-                      draft.isGenerating
-                        ? "border-ink/30 bg-cream-dark"
-                        : draft.name && draft.description
-                        ? "border-ink hover:border-accent hover:bg-accent/10"
-                        : "border-ink/20 text-ink/30 cursor-not-allowed"
-                    }
-                  `}
-                >
+                <div className="relative group">
                   {draft.isGenerating ? (
-                    <>
-                      <span className="text-4xl animate-spin">◐</span>
-                      <span>生成中...</span>
-                    </>
+                    <button
+                      onClick={() => handleCancel(draft.id)}
+                      className="w-full aspect-[4/3] border-3 border-dashed border-red-300 bg-red-50 flex flex-col items-center justify-center gap-2 font-mono text-sm uppercase transition-all cursor-pointer hover:bg-red-100 ring-2 ring-red-500 ring-offset-2"
+                    >
+                      <span className="text-3xl text-red-500">✕</span>
+                      <span className="text-red-500 font-bold">取消生成</span>
+                    </button>
                   ) : (
-                    <>
+                    <button
+                      onClick={() => handleGenerate(draft.id)}
+                      disabled={!draft.name || !draft.description}
+                      className={`
+                            w-full aspect-[4/3] border-3 border-dashed flex flex-col items-center justify-center gap-2
+                            font-mono text-sm uppercase transition-all cursor-pointer
+                            ${draft.name && draft.description
+                          ? "border-ink hover:border-accent hover:bg-accent/10"
+                          : "border-ink/20 text-ink/30 cursor-not-allowed"
+                        }
+                          `}
+                    >
                       <span className="text-3xl">🎨</span>
                       <span>生成角色图像</span>
-                    </>
+                    </button>
                   )}
-                </button>
+                </div>
               )}
 
               {/* 错误提示 */}
@@ -377,9 +415,8 @@ export default function CharactersPage() {
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className={`w-3 h-3 border-2 border-cream/30 ${
-              i === 2 ? "bg-cream" : ""
-            }`}
+            className={`w-3 h-3 border-2 border-cream/30 ${i === 2 ? "bg-cream" : ""
+              }`}
           />
         ))}
       </div>

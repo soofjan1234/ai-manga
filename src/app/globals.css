@@ -32,11 +32,17 @@ body::before {
   z-index: 0;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: "Playfair Display", Georgia, serif;
 }
 
 @layer components {
+
   /* 复古卡片 */
   .retro-card {
     @apply bg-cream border-3 border-ink rounded-none shadow-retro;
@@ -52,33 +58,20 @@ h1, h2, h3, h4, h5, h6 {
 
   /* 复古按钮 */
   .btn-retro {
-    @apply px-6 py-3 font-bold uppercase tracking-wider
-           bg-accent text-ink border-3 border-ink
-           shadow-retro transition-all duration-150 cursor-pointer
-           hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none
-           active:translate-x-[4px] active:translate-y-[4px] active:shadow-none;
+    @apply px-6 py-3 font-bold uppercase tracking-wider bg-accent text-ink border-3 border-ink shadow-retro transition-all duration-150 cursor-pointer hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none active:translate-x-[4px] active:translate-y-[4px] active:shadow-none;
   }
 
   .btn-retro-outline {
-    @apply px-6 py-3 font-bold uppercase tracking-wider
-           bg-transparent text-cream border-3 border-cream
-           transition-all duration-150 cursor-pointer
-           hover:bg-cream hover:text-ink;
+    @apply px-6 py-3 font-bold uppercase tracking-wider bg-transparent text-cream border-3 border-cream transition-all duration-150 cursor-pointer hover:bg-cream hover:text-ink;
   }
 
   .btn-retro-dark {
-    @apply px-6 py-3 font-bold uppercase tracking-wider
-           bg-ink text-cream border-3 border-cream
-           shadow-retro-accent transition-all duration-150 cursor-pointer
-           hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none;
+    @apply px-6 py-3 font-bold uppercase tracking-wider bg-ink text-cream border-3 border-cream shadow-retro-accent transition-all duration-150 cursor-pointer hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none;
   }
 
   /* 复古输入框 */
   .input-retro {
-    @apply w-full px-4 py-3
-           bg-cream text-ink border-3 border-ink
-           font-body placeholder:text-ink/40
-           focus:outline-none focus:ring-0;
+    @apply w-full px-4 py-3 bg-cream text-ink border-3 border-ink font-body placeholder:text-ink/40 focus:outline-none focus:ring-0;
   }
 
   .textarea-retro {
@@ -87,34 +80,26 @@ h1, h2, h3, h4, h5, h6 {
 
   /* 复古标签 */
   .badge-retro {
-    @apply inline-flex items-center px-3 py-1 
-           bg-ink text-cream text-sm font-mono uppercase tracking-wider
-           border-2 border-cream;
+    @apply inline-flex items-center px-3 py-1 bg-ink text-cream text-sm font-mono uppercase tracking-wider border-2 border-cream;
   }
 
   .badge-retro-accent {
-    @apply inline-flex items-center px-3 py-1 
-           bg-accent text-ink text-sm font-mono uppercase tracking-wider
-           border-2 border-ink;
+    @apply inline-flex items-center px-3 py-1 bg-accent text-ink text-sm font-mono uppercase tracking-wider border-2 border-ink;
   }
 
   /* 波浪条纹装饰 */
   .stripe-decoration {
-    background: repeating-linear-gradient(
-      0deg,
-      #1a1a1a 0px,
-      #1a1a1a 3px,
-      #F5F0E1 3px,
-      #F5F0E1 6px
-    );
+    background: repeating-linear-gradient(0deg,
+        #1a1a1a 0px,
+        #1a1a1a 3px,
+        #F5F0E1 3px,
+        #F5F0E1 6px);
     height: 20px;
   }
 
   /* 步骤指示器 */
   .step-retro {
-    @apply w-10 h-10 flex items-center justify-center
-           font-mono font-bold text-lg
-           border-3 transition-all duration-200;
+    @apply w-10 h-10 flex items-center justify-center font-mono font-bold text-lg border-3 transition-all duration-200;
   }
 
   .step-retro-active {

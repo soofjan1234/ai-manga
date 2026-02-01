@@ -1,5 +1,4 @@
 "use client";
-
 import {
   createContext,
   useContext,
@@ -8,6 +7,7 @@ import {
   useEffect,
   ReactNode,
 } from "react";
+import { v4 as uuidv4 } from "uuid";
 
 // 类型定义
 export interface Character {
@@ -15,6 +15,16 @@ export interface Character {
   name: string;
   description: string;
   imageUrl?: string;
+}
+
+export interface CharacterDraft {
+  id: string;
+  name: string;
+  description: string;
+  imageUrl: string | null;
+  isGenerating: boolean;
+  error: string | null;
+  editPrompt: string;
 }
 
 export interface Episode {
@@ -32,6 +42,7 @@ export interface StoryState {
   episodes: Episode[];
   suggestions: string[]; // AI 生成的剧情建议选项
   isFinished: boolean; // 是否已完结
+  characterDrafts: CharacterDraft[]; // 角色草稿暂存
 }
 
 interface StoryContextType {
@@ -51,6 +62,9 @@ interface StoryContextType {
   forkEpisode: (id: string, newOutline: string) => void;
   removeEpisode: (id: string) => void;
   setEpisodes: (episodes: Episode[]) => void;
+  clearEpisodes: () => void;
+  // 角色草稿管理
+  setCharacterDrafts: (drafts: CharacterDraft[]) => void;
   // 剧情建议管理
   setSuggestions: (suggestions: string[]) => void;
   clearSuggestions: () => void;
@@ -69,6 +83,17 @@ const initialState: StoryState = {
   episodes: [],
   suggestions: [],
   isFinished: false,
+  characterDrafts: [
+    {
+      id: uuidv4(),
+      name: "",
+      description: "",
+      imageUrl: null,
+      isGenerating: false,
+      error: null,
+      editPrompt: "",
+    }
+  ],
 };
 
 const StoryContext = createContext<StoryContextType | undefined>(undefined);
@@ -112,11 +137,13 @@ export function StoryProvider({ children }: { children: ReactNode }) {
     loadState();
   }, []);
 
-  // 持久化：当状态改变时保存到 IndexedDB
+  // 持久化：当状态改变时保存到 IndexedDB (增加防抖)
   useEffect(() => {
     if (isHydrated) {
-      // 使用防抖或简单的异步保存，不阻塞 UI
-      saveStateToDB(STORAGE_KEY, state);
+      const timer = setTimeout(() => {
+        saveStateToDB(STORAGE_KEY, state);
+      }, 1000);
+      return () => clearTimeout(timer);
     }
   }, [state, isHydrated]);
 
@@ -215,6 +242,11 @@ export function StoryProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, episodes: [] }));
   }, []);
 
+  // 角色草稿管理
+  const setCharacterDrafts = useCallback((drafts: CharacterDraft[]) => {
+    setState((prev) => ({ ...prev, characterDrafts: drafts }));
+  }, []);
+
   // 剧情建议管理
   const setSuggestions = useCallback((suggestions: string[]) => {
     setState((prev) => ({ ...prev, suggestions }));
@@ -250,6 +282,8 @@ export function StoryProvider({ children }: { children: ReactNode }) {
         forkEpisode,
         removeEpisode,
         setEpisodes,
+        clearEpisodes,
+        setCharacterDrafts,
         setSuggestions,
         clearSuggestions,
         setFinished,

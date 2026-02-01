@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import StoryTimeline from "./StoryTimeline";
 import InputArea from "./InputArea";
@@ -13,6 +13,14 @@ export default function MangaGenerator() {
     const [isProcessing, setIsProcessing] = useState(false);
     const [isSuggesting, setIsSuggesting] = useState(false);
     const [pendingInput, setPendingInput] = useState<string | undefined>(undefined);
+    const abortControllerRef = useRef<AbortController | null>(null);
+
+    const handleCancel = useCallback(() => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+    }, []);
 
     const fetchSuggestions = useCallback(async () => {
         // 如果已经有建议了，就不再重复生成
@@ -64,22 +72,7 @@ export default function MangaGenerator() {
         fetchSuggestions(); // 重新获取
     };
 
-    const handleGenerate = async (prompt: string) => {
-        setIsProcessing(true);
-        clearSuggestions(); // 生成新内容时清空建议
-
-        const newStoryId = uuidv4();
-        const newEpisode: StoryPanelData = {
-            id: newStoryId,
-            outline: prompt,
-            images: [],
-            timestamp: Date.now(),
-            status: "generating"
-        };
-
-        addEpisode(newEpisode);
-
-        // 准备角色数据
+    const prepareGenerationData = (currentIndex: number) => {
         const characters: GeminiCharacter[] | undefined = state.characters.length > 0
             ? state.characters
                 .filter(c => c.imageUrl)
@@ -90,10 +83,10 @@ export default function MangaGenerator() {
                 }))
             : undefined;
 
-        // 准备上一页数据
-        const previousPage = state.episodes.length > 0
+        const previousPage = currentIndex > 0
             ? (() => {
-                const lastCompleteEpisode = [...state.episodes]
+                const previousEpisodes = state.episodes.slice(0, currentIndex);
+                const lastCompleteEpisode = [...previousEpisodes]
                     .reverse()
                     .find(e => e.status === "complete" && e.images.length > 0);
 
@@ -107,6 +100,30 @@ export default function MangaGenerator() {
             })()
             : undefined;
 
+        return { characters, previousPage };
+    };
+
+    const handleGenerate = async (prompt: string) => {
+        setIsProcessing(true);
+        clearSuggestions();
+
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
+        const newStoryId = uuidv4();
+        const newEpisode: StoryPanelData = {
+            id: newStoryId,
+            outline: prompt,
+            images: [],
+            timestamp: Date.now(),
+            status: "generating"
+        };
+
+        addEpisode(newEpisode);
+
+        // 注意：此处 state.episodes.length 还是添加前的长度，刚好对应新添加项的索引
+        const { characters, previousPage } = prepareGenerationData(state.episodes.length);
+
         try {
             const response = await fetch("/api/generate-manga", {
                 method: "POST",
@@ -118,6 +135,7 @@ export default function MangaGenerator() {
                     generateEmptyBubbles: false,
                     style: state.style
                 }),
+                signal: controller.signal,
             });
 
             const data = await response.json();
@@ -131,13 +149,18 @@ export default function MangaGenerator() {
                 images: [data.image]
             });
 
-        } catch (error) {
+        } catch (error: any) {
+            if (error.name === 'AbortError') {
+                console.log("Manga generation aborted");
+                return;
+            }
             console.error("Error generating manga:", error);
             updateEpisode(newStoryId, {
                 status: "error",
             });
         } finally {
             setIsProcessing(false);
+            abortControllerRef.current = null;
         }
     };
 
@@ -149,33 +172,11 @@ export default function MangaGenerator() {
         setIsProcessing(true);
         clearSuggestions();
 
-        const characters: GeminiCharacter[] | undefined = state.characters.length > 0
-            ? state.characters
-                .filter(c => c.imageUrl)
-                .map(c => ({
-                    name: c.name,
-                    sheetImage: c.imageUrl!,
-                    description: c.description
-                }))
-            : undefined;
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
 
         const currentIndex = state.episodes.findIndex(e => e.id === id);
-        const previousPage = currentIndex > 0
-            ? (() => {
-                const previousEpisodes = state.episodes.slice(0, currentIndex);
-                const lastCompleteEpisode = [...previousEpisodes]
-                    .reverse()
-                    .find(e => e.status === "complete" && e.images.length > 0);
-
-                if (lastCompleteEpisode) {
-                    return {
-                        generatedImage: lastCompleteEpisode.images[0],
-                        sceneDescription: lastCompleteEpisode.outline
-                    };
-                }
-                return undefined;
-            })()
-            : undefined;
+        const { characters, previousPage } = prepareGenerationData(currentIndex);
 
         try {
             const response = await fetch("/api/generate-manga", {
@@ -188,6 +189,7 @@ export default function MangaGenerator() {
                     generateEmptyBubbles: false,
                     style: state.style
                 }),
+                signal: controller.signal,
             });
 
             const data = await response.json();
@@ -201,13 +203,15 @@ export default function MangaGenerator() {
                 images: [data.image]
             });
 
-        } catch (error) {
+        } catch (error: any) {
+            if (error.name === 'AbortError') return;
             console.error("Error regenerating manga:", error);
             updateEpisode(id, {
                 status: "error",
             });
         } finally {
             setIsProcessing(false);
+            abortControllerRef.current = null;
         }
     };
 
@@ -217,45 +221,24 @@ export default function MangaGenerator() {
         setIsProcessing(true);
         clearSuggestions();
 
-        const characters: GeminiCharacter[] | undefined = state.characters.length > 0
-            ? state.characters
-                .filter(c => c.imageUrl)
-                .map(c => ({
-                    name: c.name,
-                    sheetImage: c.imageUrl!,
-                    description: c.description
-                }))
-            : undefined;
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
 
         const currentIndex = state.episodes.findIndex(e => e.id === id);
-        const previousPage = currentIndex > 0
-            ? (() => {
-                const previousEpisodes = state.episodes.slice(0, currentIndex);
-                const lastCompleteEpisode = [...previousEpisodes]
-                    .reverse()
-                    .find(e => e.status === "complete" && e.images.length > 0);
-
-                if (lastCompleteEpisode) {
-                    return {
-                        generatedImage: lastCompleteEpisode.images[0],
-                        sceneDescription: lastCompleteEpisode.outline
-                    };
-                }
-                return undefined;
-            })()
-            : undefined;
+        const { characters, previousPage } = prepareGenerationData(currentIndex);
 
         try {
             const response = await fetch("/api/generate-manga", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    prompt: newOutline, // 使用新的大纲
+                    prompt: newOutline,
                     characters,
                     previousPage,
                     generateEmptyBubbles: false,
                     style: state.style
                 }),
+                signal: controller.signal,
             });
 
             const data = await response.json();
@@ -269,13 +252,15 @@ export default function MangaGenerator() {
                 images: [data.image]
             });
 
-        } catch (error) {
+        } catch (error: any) {
+            if (error.name === 'AbortError') return;
             console.error("Error generating fork:", error);
             updateEpisode(id, {
                 status: "error",
             });
         } finally {
             setIsProcessing(false);
+            abortControllerRef.current = null;
         }
     }
 
@@ -297,6 +282,7 @@ export default function MangaGenerator() {
                 <InputArea
                     onGenerate={handleGenerate}
                     isLoading={isProcessing}
+                    onCancel={handleCancel}
                     externalInput={pendingInput}
                 />
             ) : (

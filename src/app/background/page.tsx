@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useStory } from "@/lib/store";
 
@@ -22,10 +22,31 @@ export default function BackgroundPage() {
   const [selectedStyle, setSelectedStyle] = useState(state.style);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const enhanceAbortController = useRef<AbortController | null>(null);
+  const generateAbortController = useRef<AbortController | null>(null);
+
+  // 监听并自动同步到全局 Store，防止跳转丢失数据
+  useEffect(() => {
+    setBackground(background);
+    setStyle(selectedStyle);
+  }, [background, selectedStyle, setBackground, setStyle]);
+
+  const handleCancelEnhance = () => {
+    enhanceAbortController.current?.abort();
+    setIsEnhancing(false);
+  };
+
+  const handleCancelGenerate = () => {
+    generateAbortController.current?.abort();
+    setIsGenerating(false);
+  };
 
   const handleEnhance = async () => {
     if (!background.trim() || isEnhancing) return;
     setIsEnhancing(true);
+    const controller = new AbortController();
+    enhanceAbortController.current = controller;
+
     try {
       const response = await fetch("/api/background/polish", {
         method: "POST",
@@ -34,6 +55,7 @@ export default function BackgroundPage() {
           background,
           style: styleOptions.find((s) => s.id === selectedStyle)?.label || "",
         }),
+        signal: controller.signal,
       });
 
       const data = await response.json();
@@ -42,17 +64,22 @@ export default function BackgroundPage() {
       } else if (data.error) {
         alert("润色失败: " + data.error);
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === "AbortError") return;
       console.error("润色请求失败:", error);
       alert("网络请求失败，请稍后重试");
     } finally {
       setIsEnhancing(false);
+      enhanceAbortController.current = null;
     }
   };
 
   const handleRandomGenerate = async () => {
     if (isGenerating) return;
     setIsGenerating(true);
+    const controller = new AbortController();
+    generateAbortController.current = controller;
+
     try {
       const response = await fetch("/api/background/generate", {
         method: "POST",
@@ -60,6 +87,7 @@ export default function BackgroundPage() {
         body: JSON.stringify({
           style: styleOptions.find((s) => s.id === selectedStyle)?.label || "",
         }),
+        signal: controller.signal,
       });
 
       const data = await response.json();
@@ -68,11 +96,13 @@ export default function BackgroundPage() {
       } else if (data.error) {
         alert("生成失败: " + data.error);
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === "AbortError") return;
       console.error("生成请求失败:", error);
       alert("网络请求失败，请稍后重试");
     } finally {
       setIsGenerating(false);
+      generateAbortController.current = null;
     }
   };
 
@@ -124,49 +154,55 @@ export default function BackgroundPage() {
           <div className="flex justify-end gap-3">
             {/* 随机生成按钮：仅在有风格且无内容时显示 */}
             {!background.trim() && selectedStyle && (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleRandomGenerate}
+                  disabled={isGenerating}
+                  className="flex items-center gap-2 px-4 py-2 font-mono text-sm uppercase tracking-wider border-2 border-accent bg-accent text-ink hover:bg-accent/80 transition-all duration-200 cursor-pointer shadow-retro-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none disabled:opacity-50"
+                >
+                  {isGenerating ? (
+                    <>
+                      <span className="animate-spin">◐</span>
+                      生成中...
+                    </>
+                  ) : (
+                    <>
+                      <span>🎲</span>
+                      随个灵感
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            <div className="flex gap-2">
               <button
-                onClick={handleRandomGenerate}
-                disabled={isGenerating}
-                className="flex items-center gap-2 px-4 py-2 font-mono text-sm uppercase tracking-wider border-2 border-accent bg-accent text-ink hover:bg-accent/80 transition-all duration-200 cursor-pointer shadow-retro-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+                onClick={handleEnhance}
+                disabled={!background.trim() || isEnhancing}
+                className={`
+                  flex items-center gap-2 px-4 py-2 font-mono text-sm uppercase tracking-wider
+                  border-2 transition-all duration-200 cursor-pointer
+                  ${background.trim() && !isEnhancing
+                    ? "bg-transparent text-ink border-ink hover:bg-ink hover:text-cream"
+                    : background.trim() && isEnhancing
+                      ? "bg-ink/10 text-ink/30 border-ink/20 cursor-wait"
+                      : "bg-ink/10 text-ink/30 border-ink/20 cursor-not-allowed hidden"
+                  }
+                `}
               >
-                {isGenerating ? (
+                {isEnhancing ? (
                   <>
                     <span className="animate-spin">◐</span>
-                    生成中...
+                    处理中...
                   </>
                 ) : (
                   <>
-                    <span>🎲</span>
-                    随个灵感
+                    <span>✦</span>
+                    AI 润色
                   </>
                 )}
               </button>
-            )}
-
-            <button
-              onClick={handleEnhance}
-              disabled={!background.trim() || isEnhancing}
-              className={`
-                flex items-center gap-2 px-4 py-2 font-mono text-sm uppercase tracking-wider
-                border-2 transition-all duration-200 cursor-pointer
-                ${background.trim() && !isEnhancing
-                  ? "bg-transparent text-ink border-ink hover:bg-ink hover:text-cream"
-                  : "bg-ink/10 text-ink/30 border-ink/20 cursor-not-allowed hidden"
-                }
-              `}
-            >
-              {isEnhancing ? (
-                <>
-                  <span className="animate-spin">◐</span>
-                  处理中...
-                </>
-              ) : (
-                <>
-                  <span>✦</span>
-                  AI 润色
-                </>
-              )}
-            </button>
+            </div>
           </div>
         </div>
 
