@@ -23,10 +23,30 @@ export default function BackgroundPage() {
   const [isEnhancing, setIsEnhancing] = useState(false);
 
   const handleEnhance = async () => {
-    if (!background.trim()) return;
+    if (!background.trim() || isEnhancing) return;
     setIsEnhancing(true);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsEnhancing(false);
+    try {
+      const response = await fetch("/api/background/polish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          background,
+          style: styleOptions.find((s) => s.id === selectedStyle)?.label || "",
+        }),
+      });
+
+      const data = await response.json();
+      if (data.polishedText) {
+        setBackgroundLocal(data.polishedText);
+      } else if (data.error) {
+        alert("润色失败: " + data.error);
+      }
+    } catch (error) {
+      console.error("润色请求失败:", error);
+      alert("网络请求失败，请稍后重试");
+    } finally {
+      setIsEnhancing(false);
+    }
   };
 
   const handleNext = () => {
@@ -81,10 +101,9 @@ export default function BackgroundPage() {
               className={`
                 flex items-center gap-2 px-4 py-2 font-mono text-sm uppercase tracking-wider
                 border-2 transition-all duration-200 cursor-pointer
-                ${
-                  background.trim() && !isEnhancing
-                    ? "bg-transparent text-ink border-ink hover:bg-ink hover:text-cream"
-                    : "bg-ink/10 text-ink/30 border-ink/20 cursor-not-allowed"
+                ${background.trim() && !isEnhancing
+                  ? "bg-transparent text-ink border-ink hover:bg-ink hover:text-cream"
+                  : "bg-ink/10 text-ink/30 border-ink/20 cursor-not-allowed"
                 }
               `}
             >
@@ -129,10 +148,9 @@ export default function BackgroundPage() {
                     flex items-center gap-3 px-4 py-4
                     font-body font-medium text-left
                     border-3 transition-all duration-150 cursor-pointer
-                    ${
-                      isSelected
-                        ? "bg-accent text-ink border-ink shadow-retro translate-x-0 translate-y-0"
-                        : "bg-cream text-ink border-ink/30 hover:border-ink hover:shadow-retro hover:-translate-x-[2px] hover:-translate-y-[2px]"
+                    ${isSelected
+                      ? "bg-accent text-ink border-ink shadow-retro translate-x-0 translate-y-0"
+                      : "bg-cream text-ink border-ink/30 hover:border-ink hover:shadow-retro hover:-translate-x-[2px] hover:-translate-y-[2px]"
                     }
                   `}
                 >

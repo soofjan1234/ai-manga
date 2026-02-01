@@ -6,15 +6,15 @@ export async function POST(req: NextRequest) {
         const {
             prompt,
             characters,
-            colorMode,
             previousPage,
-            generateEmptyBubbles
+            generateEmptyBubbles,
+            style
         }: {
             prompt: string;
             characters?: Character[];
-            colorMode?: 'color' | 'monochrome';
             previousPage?: PreviousPageData;
             generateEmptyBubbles?: boolean;
+            style?: string;
         } = await req.json();
 
         if (!prompt) {
@@ -27,9 +27,9 @@ export async function POST(req: NextRequest) {
         const imageBase64 = await generateMangaPage(
             prompt,
             characters,
-            colorMode,
             previousPage,
-            generateEmptyBubbles
+            generateEmptyBubbles,
+            style
         );
 
         return NextResponse.json({ image: imageBase64 });

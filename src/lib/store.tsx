@@ -5,6 +5,7 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   ReactNode,
 } from "react";
 
@@ -19,9 +20,9 @@ export interface Character {
 export interface Episode {
   id: string;
   outline: string;
-  imageUrl?: string;
-  suggestions?: string[];
-  createdAt: Date;
+  images: string[];
+  timestamp: number;
+  status: "generating" | "complete" | "error";
 }
 
 export interface StoryState {
@@ -33,6 +34,7 @@ export interface StoryState {
 
 interface StoryContextType {
   state: StoryState;
+  isHydrated: boolean;
   // 背景设定
   setBackground: (background: string) => void;
   setStyle: (style: string) => void;
@@ -42,12 +44,20 @@ interface StoryContextType {
   removeCharacter: (id: string) => void;
   setCharacters: (characters: Character[]) => void;
   // 漫画管理
+  // 漫画管理
   addEpisode: (episode: Episode) => void;
   updateEpisode: (id: string, episode: Partial<Episode>) => void;
+  /**
+   * 分支剧情：更新指定章节的大纲，并移除该章节之后的所有章节
+   */
+  forkEpisode: (id: string, newOutline: string) => void;
   removeEpisode: (id: string) => void;
+  setEpisodes: (episodes: Episode[]) => void;
   // 重置
   resetStory: () => void;
 }
+
+const STORAGE_KEY = "ai-manga-story-state";
 
 const initialState: StoryState = {
   background: "",
@@ -60,6 +70,27 @@ const StoryContext = createContext<StoryContextType | undefined>(undefined);
 
 export function StoryProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<StoryState>(initialState);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  // 初始化：从 localStorage 加载
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        setState(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to load state from localStorage:", e);
+      }
+    }
+    setIsHydrated(true);
+  }, []);
+
+  // 持久化：当状态改变时保存
+  useEffect(() => {
+    if (isHydrated) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+  }, [state, isHydrated]);
 
   // 背景设定
   const setBackground = useCallback((background: string) => {
@@ -118,11 +149,38 @@ export function StoryProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const forkEpisode = useCallback((id: string, newOutline: string) => {
+    setState((prev) => {
+      const index = prev.episodes.findIndex((e) => e.id === id);
+      if (index === -1) return prev;
+
+      // 截断数组：保留到当前章节（包含）
+      const newEpisodes = prev.episodes.slice(0, index + 1);
+
+      // 更新当前章节
+      newEpisodes[index] = {
+        ...newEpisodes[index],
+        outline: newOutline,
+        status: "generating",
+        images: [], // 清空旧图片
+      };
+
+      return {
+        ...prev,
+        episodes: newEpisodes,
+      };
+    });
+  }, []);
+
   const removeEpisode = useCallback((id: string) => {
     setState((prev) => ({
       ...prev,
       episodes: prev.episodes.filter((e) => e.id !== id),
     }));
+  }, []);
+
+  const setEpisodes = useCallback((episodes: Episode[]) => {
+    setState((prev) => ({ ...prev, episodes }));
   }, []);
 
   // 重置
@@ -134,6 +192,7 @@ export function StoryProvider({ children }: { children: ReactNode }) {
     <StoryContext.Provider
       value={{
         state,
+        isHydrated,
         setBackground,
         setStyle,
         addCharacter,
@@ -142,7 +201,9 @@ export function StoryProvider({ children }: { children: ReactNode }) {
         setCharacters,
         addEpisode,
         updateEpisode,
+        forkEpisode,
         removeEpisode,
+        setEpisodes,
         resetStory,
       }}
     >

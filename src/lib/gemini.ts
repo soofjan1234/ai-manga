@@ -38,8 +38,7 @@ function base64ToGeminiPart(base64: string, mimeType: string) {
  */
 export async function generateCharacterImage(
   characterName: string,
-  description: string,
-  colorMode: "color" | "monochrome" = "color"
+  description: string
 ): Promise<string> {
   const prompt = `
 你是一位专业的漫画艺术家。你的任务是为名为"${characterName}"的角色创建角色参考表。
@@ -48,7 +47,7 @@ export async function generateCharacterImage(
 ${description}
 
 **指示：**
-1. **风格：** 以干净、${colorMode === "monochrome" ? "黑白（单色）" : "全彩"}漫画风格生成表，适合艺术家参考。
+1. **风格：** 以干净的全彩漫画风格生成表，适合艺术家参考。
 2. **内容和布局：** 角色表必须包含恰好六个姿势，排列成两行：
    - **顶行（头像）：** 三个头像，显示不同视角和表情（例如：侧视、正视中性表情、正视微笑）。
    - **底行（全身）：** 三个全身视角（正面、侧面、背面）。
@@ -92,8 +91,7 @@ ${description}
  */
 export async function generateCharacterSheet(
   referenceImagesBase64: string[],
-  characterName: string,
-  colorMode: "color" | "monochrome" = "monochrome"
+  characterName: string
 ): Promise<string> {
   const imageParts = referenceImagesBase64.map((base64) => {
     const mimeType =
@@ -106,7 +104,7 @@ export async function generateCharacterSheet(
 
     **指示：**
     1.  **参考图像：**你获得了多个参考图像。综合所有图像的关键特征来创建单一、连贯的角色设计。例如，如果一张图像显示疤痕，另一张显示角色发型，最终设计中要包含两者。
-    2.  **风格：**以干净、${colorMode === 'monochrome' ? '黑白（单色）' : '全彩'}漫画风格生成表，适合艺术家参考。
+    2.  **风格：**以干净的全彩漫画风格生成表，适合艺术家参考。
     3.  **内容和布局：**角色表必须包含恰好六个姿势，排列成两行：
         - **顶行（头像）：**三个头像，显示不同视角和表情（例如侧视、正视中性表情、正视微笑）。
         - **底行（全身）：**三个全身视角（正面、侧面和背面）。
@@ -259,16 +257,16 @@ export interface PreviousPageData {
 export async function generateMangaPage(
   sceneDescription: string,
   characters?: Character[],
-  colorMode: 'color' | 'monochrome' = 'monochrome',
   previousPage?: PreviousPageData,
-  generateEmptyBubbles: boolean = false
+  generateEmptyBubbles: boolean = false,
+  style: string = ""
 ): Promise<string> {
   // 调试日志
   console.log("--- 漫画生成请求 ---");
   console.log("场景描述:", sceneDescription);
+  console.log("风格:", style || "未指定");
   console.log("角色数量:", characters?.length || 0);
   console.log("是否有上一页:", !!previousPage);
-  console.log("颜色模式:", colorMode);
   console.log("生成空气泡:", generateEmptyBubbles);
 
   const charactersInScene = characters || [];
@@ -326,7 +324,7 @@ ${previousPage.sceneDescription}
         - **重叠和插入分镜：** 重叠分镜以显示同时发生的动作，或使用插入分镜来聚焦。
         - **变化的尺寸和形状：** 混合使用大分镜和小分镜。使用非矩形形状来匹配场景氛围。
         - **分镜突破：** 为了高冲击力，让角色或效果超出分镜边界。
-    5.  **颜色和风格：** 以${colorMode === 'monochrome' ? '黑白（单色）' : '全彩'}创建漫画。**所有文字和对话气泡必须有粗体、清晰和厚实的黑色轮廓。**
+    5.  **颜色和风格：** 以全彩创建漫画。${style ? `**艺术风格：${style}。**` : ''}**所有文字和对话气泡必须有粗体、清晰和厚实的黑色轮廓。**
     6.  **对话气泡：** ${generateEmptyBubbles ? '如果脚本包含对话，创建适当的对话气泡。你必须绘制这些对话气泡，但让它们完全空白。不要在内部添加任何文字、对话或音效。' : '如果脚本包含对话，创建适当的气泡并将对话文字放入其中。'}
     7.  **最终输出：** 仅生成最终漫画页作为单一图像。不要包含任何文字、描述或解释。
 
@@ -384,4 +382,69 @@ ${previousPage.sceneDescription}
   }
 
   return resultImage;
+}
+
+/**
+ * 润色故事背景
+ */
+export async function polishBackground(
+  background: string,
+  style: string = ""
+): Promise<string> {
+  const prompt = `
+你是一位专业的漫画编辑和编剧。你的任务是润色和丰富用户提供的漫画故事背景设定。
+
+**原始背景：**
+${background}
+
+**风格：** ${style || "通用"}
+
+**润色要求：**
+1. **增强画面感：** 使用更具描述性的语言，让读者能脑补出画面。
+2. **完善世界观：** 如果背景较简单，适当增加一些关于环境、氛围或冲突的细节。
+3. **保持核心：** 不要改变用户原有的核心创意和情节。
+4. **简洁有力：** 保持在 100 字左右，适合作为漫画的开篇设定。
+5. **直接输出：** 只输出润色后的背景内容，不要包含任何多余的解释、回复或标题。
+
+**润色后的背景设定：**
+  `.trim();
+
+  const response = await getAiClient().models.generateContent({
+    model: getTextModel(),
+    contents: prompt,
+  });
+
+  return response.text || background;
+}
+
+/**
+ * 润色漫画大纲/分镜脚本
+ */
+export async function polishOutline(
+  outline: string,
+  style: string = ""
+): Promise<string> {
+  const prompt = `
+你是一位专业的漫画编剧。你的任务是润色用户提供的单页漫画分镜大纲，使其描述更丰富、画面感更强，并更适合 AI 图像模型生成。
+
+**原始大纲：**
+${outline}
+
+**整体风格：** ${style || "通用"}
+
+**润色要求：**
+1. **分镜化描述：** 如果大纲太笼统，将其拆解为更有画面感的动作描述（如：特写、全景、动态手势）。
+2. **增强视觉细节：** 加入光影、构图或氛围相关的关键词。
+3. **保持简短：** 保持在 50-100 字左右。
+4. **直接输出：** 只输出润色后的大纲，不要包含任何分镜编号或多余的解释。
+
+**润色后的内容：**
+  `.trim();
+
+  const response = await getAiClient().models.generateContent({
+    model: getTextModel(),
+    contents: prompt,
+  });
+
+  return response.text || outline;
 }

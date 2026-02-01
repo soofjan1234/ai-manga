@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import StoryTimeline from "./StoryTimeline";
 import InputArea from "./InputArea";
@@ -9,33 +9,14 @@ import { useStory } from "@/lib/store";
 import { Character as GeminiCharacter } from "@/lib/gemini";
 
 export default function MangaGenerator() {
-    const { state } = useStory();
-    const [stories, setStories] = useState<StoryPanelData[]>([]);
-    const [loading, setLoading] = useState(false);
-
-    // Load stories from localStorage on mount
-    useEffect(() => {
-        const saved = localStorage.getItem("manga-stories");
-        if (saved) {
-            try {
-                setStories(JSON.parse(saved));
-            } catch (e) {
-                console.error("Failed to parse saved stories", e);
-            }
-        }
-    }, []);
-
-    // Save stories to localStorage whenever they change
-    useEffect(() => {
-        localStorage.setItem("manga-stories", JSON.stringify(stories));
-    }, [stories]);
+    const { state, addEpisode, updateEpisode, forkEpisode, isHydrated } = useStory();
+    const [isProcessing, setIsProcessing] = useState(false);
 
     const handleGenerate = async (prompt: string) => {
-        setLoading(true);
+        setIsProcessing(true);
 
-        // Create new story placeholder
         const newStoryId = uuidv4();
-        const newStory: StoryPanelData = {
+        const newEpisode: StoryPanelData = {
             id: newStoryId,
             outline: prompt,
             images: [],
@@ -43,97 +24,7 @@ export default function MangaGenerator() {
             status: "generating"
         };
 
-        setStories(prev => [...prev, newStory]);
-
-        // 准备角色数据 - 将 store 中的角色转换为 Gemini API 格式
-        const characters: GeminiCharacter[] | undefined = state.characters.length > 0
-            ? state.characters
-                .filter(c => c.imageUrl) // 只传递有图像的角色
-                .map(c => ({
-                    name: c.name,
-                    sheetImage: c.imageUrl!, // imageUrl 就是 base64 格式的角色参考表
-                    description: c.description
-                }))
-            : undefined;
-
-        // 准备上一页数据 - 获取最后一个完成的故事
-        const previousPage = stories.length > 0
-            ? (() => {
-                const lastCompleteStory = [...stories]
-                    .reverse()
-                    .find(s => s.status === "complete" && s.images.length > 0);
-
-                if (lastCompleteStory) {
-                    return {
-                        generatedImage: lastCompleteStory.images[0],
-                        sceneDescription: lastCompleteStory.outline
-                    };
-                }
-                return undefined;
-            })()
-            : undefined;
-
-        console.log("前端准备发送的数据:");
-        console.log("- 角色数量:", characters?.length || 0);
-        console.log("- 是否有上一页:", !!previousPage);
-
-        // Call API
-        try {
-            const response = await fetch("/api/generate-manga", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    prompt,
-                    characters,
-                    colorMode: "monochrome",
-                    previousPage,
-                    generateEmptyBubbles: false
-                }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || "Generation failed");
-            }
-
-            setStories(prev => prev.map(story => {
-                if (story.id === newStoryId) {
-                    return {
-                        ...story,
-                        status: "complete",
-                        images: [data.image]
-                    };
-                }
-                return story;
-            }));
-
-        } catch (error) {
-            console.error("Error generating manga:", error);
-            setStories(prev => prev.map(story => {
-                if (story.id === newStoryId) {
-                    return {
-                        ...story,
-                        status: "error",
-                    };
-                }
-                return story;
-            }));
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleRegenerate = async (id: string) => {
-        // Find the story to regenerate
-        const storyToRegen = stories.find(s => s.id === id);
-        if (!storyToRegen) return;
-
-        // Reset status to generating
-        setStories(prev => prev.map(s =>
-            s.id === id ? { ...s, status: "generating", images: [] } : s
-        ));
-        setLoading(true);
+        addEpisode(newEpisode);
 
         // 准备角色数据
         const characters: GeminiCharacter[] | undefined = state.characters.length > 0
@@ -146,19 +37,17 @@ export default function MangaGenerator() {
                 }))
             : undefined;
 
-        // 准备上一页数据 - 获取当前故事之前的最后一个完成的故事
-        const currentIndex = stories.findIndex(s => s.id === id);
-        const previousPage = currentIndex > 0
+        // 准备上一页数据
+        const previousPage = state.episodes.length > 0
             ? (() => {
-                const previousStories = stories.slice(0, currentIndex);
-                const lastCompleteStory = [...previousStories]
+                const lastCompleteEpisode = [...state.episodes]
                     .reverse()
-                    .find(s => s.status === "complete" && s.images.length > 0);
+                    .find(e => e.status === "complete" && e.images.length > 0);
 
-                if (lastCompleteStory) {
+                if (lastCompleteEpisode) {
                     return {
-                        generatedImage: lastCompleteStory.images[0],
-                        sceneDescription: lastCompleteStory.outline
+                        generatedImage: lastCompleteEpisode.images[0],
+                        sceneDescription: lastCompleteEpisode.outline
                     };
                 }
                 return undefined;
@@ -170,11 +59,80 @@ export default function MangaGenerator() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    prompt: storyToRegen.outline,
+                    prompt,
                     characters,
-                    colorMode: "monochrome",
                     previousPage,
-                    generateEmptyBubbles: false
+                    generateEmptyBubbles: false,
+                    style: state.style
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Generation failed");
+            }
+
+            updateEpisode(newStoryId, {
+                status: "complete",
+                images: [data.image]
+            });
+
+        } catch (error) {
+            console.error("Error generating manga:", error);
+            updateEpisode(newStoryId, {
+                status: "error",
+            });
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleRegenerate = async (id: string) => {
+        const episodeToRegen = state.episodes.find(e => e.id === id);
+        if (!episodeToRegen) return;
+
+        updateEpisode(id, { status: "generating", images: [] });
+        setIsProcessing(true);
+
+        const characters: GeminiCharacter[] | undefined = state.characters.length > 0
+            ? state.characters
+                .filter(c => c.imageUrl)
+                .map(c => ({
+                    name: c.name,
+                    sheetImage: c.imageUrl!,
+                    description: c.description
+                }))
+            : undefined;
+
+        const currentIndex = state.episodes.findIndex(e => e.id === id);
+        const previousPage = currentIndex > 0
+            ? (() => {
+                const previousEpisodes = state.episodes.slice(0, currentIndex);
+                const lastCompleteEpisode = [...previousEpisodes]
+                    .reverse()
+                    .find(e => e.status === "complete" && e.images.length > 0);
+
+                if (lastCompleteEpisode) {
+                    return {
+                        generatedImage: lastCompleteEpisode.images[0],
+                        sceneDescription: lastCompleteEpisode.outline
+                    };
+                }
+                return undefined;
+            })()
+            : undefined;
+
+        try {
+            const response = await fetch("/api/generate-manga", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    prompt: episodeToRegen.outline,
+                    characters,
+                    previousPage,
+                    generateEmptyBubbles: false,
+                    style: state.style
                 }),
             });
 
@@ -184,42 +142,110 @@ export default function MangaGenerator() {
                 throw new Error(data.error || "Regeneration failed");
             }
 
-            setStories(prev => prev.map(story => {
-                if (story.id === id) {
-                    return {
-                        ...story,
-                        status: "complete",
-                        images: [data.image]
-                    };
-                }
-                return story;
-            }));
+            updateEpisode(id, {
+                status: "complete",
+                images: [data.image]
+            });
 
         } catch (error) {
             console.error("Error regenerating manga:", error);
-            setStories(prev => prev.map(story => {
-                if (story.id === id) {
-                    return {
-                        ...story,
-                        status: "error",
-                    };
-                }
-                return story;
-            }));
+            updateEpisode(id, {
+                status: "error",
+            });
         } finally {
-            setLoading(false);
+            setIsProcessing(false);
         }
     };
 
+    const handleFork = async (id: string, newOutline: string) => {
+        // 先调用 store 的 fork 方法更新状态并截断后续章节
+        forkEpisode(id, newOutline);
+        setIsProcessing(true);
+
+        const characters: GeminiCharacter[] | undefined = state.characters.length > 0
+            ? state.characters
+                .filter(c => c.imageUrl)
+                .map(c => ({
+                    name: c.name,
+                    sheetImage: c.imageUrl!,
+                    description: c.description
+                }))
+            : undefined;
+
+        // 获取该章节之前的最新状态（注意：forkEpisode 已经更新了 state，但我们需要确保基于 fork 时的上下文）
+        // 由于 setState 是异步的，这里 state 可能还未更新。
+        // 但我们在 forkEpisode 中是直接操作 episodes 数组。
+        // 安全起见，我们重新计算 previousPage，就像 handleRegenerate 一样。
+        // 但要注意，fork 后，id 对应的章节就是最后一个章节了。
+
+        // 重新获取最新的 episodes 列表，但在 React 中 state 在本次 render 不会变。
+        // 我们假设 forkEpisode 生效后，我们重用 handleRegenerate 的逻辑部分，
+        // 但必须使用 newOutline 而不是从 state 中读取旧 outline。
+
+        const currentIndex = state.episodes.findIndex(e => e.id === id);
+        const previousPage = currentIndex > 0
+            ? (() => {
+                const previousEpisodes = state.episodes.slice(0, currentIndex);
+                const lastCompleteEpisode = [...previousEpisodes]
+                    .reverse()
+                    .find(e => e.status === "complete" && e.images.length > 0);
+
+                if (lastCompleteEpisode) {
+                    return {
+                        generatedImage: lastCompleteEpisode.images[0],
+                        sceneDescription: lastCompleteEpisode.outline
+                    };
+                }
+                return undefined;
+            })()
+            : undefined;
+
+        try {
+            const response = await fetch("/api/generate-manga", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    prompt: newOutline, // 使用新的大纲
+                    characters,
+                    previousPage,
+                    generateEmptyBubbles: false,
+                    style: state.style
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Fork generation failed");
+            }
+
+            updateEpisode(id, {
+                status: "complete",
+                images: [data.image]
+            });
+
+        } catch (error) {
+            console.error("Error generating fork:", error);
+            updateEpisode(id, {
+                status: "error",
+            });
+        } finally {
+            setIsProcessing(false);
+        }
+    }
+
+    if (!isHydrated) return null;
+
     return (
-        <div className="min-h-screen pb-20">
+        <div className="min-h-[calc(100vh-10rem)]">
             <StoryTimeline
-                stories={stories}
+                stories={state.episodes}
                 onRegenerate={handleRegenerate}
+                onFork={handleFork}
             />
             <InputArea
                 onGenerate={handleGenerate}
-                isLoading={loading}
+                isLoading={isProcessing}
             />
         </div>
     );
