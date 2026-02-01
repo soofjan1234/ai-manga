@@ -65,6 +65,7 @@ interface StoryContextType {
   clearEpisodes: () => void;
   // 角色草稿管理
   setCharacterDrafts: (drafts: CharacterDraft[]) => void;
+  updateCharacterDraft: (id: string, updates: Partial<CharacterDraft>) => void;
   // 剧情建议管理
   setSuggestions: (suggestions: string[]) => void;
   clearSuggestions: () => void;
@@ -247,6 +248,18 @@ export function StoryProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, characterDrafts: drafts }));
   }, []);
 
+  const updateCharacterDraft = useCallback(
+    (id: string, updates: Partial<CharacterDraft>) => {
+      setState((prev) => ({
+        ...prev,
+        characterDrafts: prev.characterDrafts.map((d) =>
+          d.id === id ? { ...d, ...updates } : d
+        ),
+      }));
+    },
+    []
+  );
+
   // 剧情建议管理
   const setSuggestions = useCallback((suggestions: string[]) => {
     setState((prev) => ({ ...prev, suggestions }));
@@ -284,6 +297,7 @@ export function StoryProvider({ children }: { children: ReactNode }) {
         setEpisodes,
         clearEpisodes,
         setCharacterDrafts,
+        updateCharacterDraft,
         setSuggestions,
         clearSuggestions,
         setFinished,

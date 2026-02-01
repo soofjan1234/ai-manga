@@ -14,9 +14,10 @@ interface StoryPanelProps {
     data: StoryPanelData;
     onRegenerate: (id: string) => void;
     onFork: (id: string, newOutline: string) => void;
+    isFinished?: boolean;
 }
 
-export default function StoryPanel({ data, onRegenerate, onFork }: StoryPanelProps) {
+export default function StoryPanel({ data, onRegenerate, onFork, isFinished }: StoryPanelProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [editedOutline, setEditedOutline] = useState(data.outline);
 
@@ -45,7 +46,7 @@ export default function StoryPanel({ data, onRegenerate, onFork }: StoryPanelPro
                     <h3 className="font-heading text-xl text-ink font-bold">
                         剧情大纲
                     </h3>
-                    {!isEditing && (
+                    {!isEditing && !isFinished && (
                         <button
                             onClick={() => setIsEditing(true)}
                             className="text-xs font-mono uppercase text-ink/50 hover:text-accent transition-colors"
@@ -120,20 +121,22 @@ export default function StoryPanel({ data, onRegenerate, onFork }: StoryPanelPro
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-3">
-                <button
-                    onClick={() => onRegenerate(data.id)}
-                    disabled={data.status === "generating" || isEditing}
-                    className={`
-            px-4 py-2 text-sm font-bold uppercase tracking-wider
-            border-2 border-ink bg-transparent text-ink
-            hover:bg-ink hover:text-cream transition-colors
-            disabled:opacity-50 disabled:cursor-not-allowed
-          `}
-                >
-                    🔄 重新生成
-                </button>
-            </div>
+            {!isFinished && (
+                <div className="flex justify-end gap-3">
+                    <button
+                        onClick={() => onRegenerate(data.id)}
+                        disabled={data.status === "generating" || isEditing}
+                        className={`
+                px-4 py-2 text-sm font-bold uppercase tracking-wider
+                border-2 border-ink bg-transparent text-ink
+                hover:bg-ink hover:text-cream transition-colors
+                disabled:opacity-50 disabled:cursor-not-allowed
+              `}
+                    >
+                        🔄 重新生成
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

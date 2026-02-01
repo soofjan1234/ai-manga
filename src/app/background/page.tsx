@@ -16,20 +16,35 @@ const styleOptions = [
 
 export default function BackgroundPage() {
   const router = useRouter();
-  const { state, setBackground, setStyle } = useStory();
-
-  const [background, setBackgroundLocal] = useState(state.background);
-  const [selectedStyle, setSelectedStyle] = useState(state.style);
+  const { state, setBackground, setStyle, isHydrated } = useStory();
+  const [background, setBackgroundLocal] = useState("");
+  const [selectedStyle, setSelectedStyle] = useState("");
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const enhanceAbortController = useRef<AbortController | null>(null);
   const generateAbortController = useRef<AbortController | null>(null);
 
+  // 当 Hydration 完成时，将全局状态同步到本地
+  useEffect(() => {
+    if (isHydrated) {
+      if (state.background && !background) {
+        setBackgroundLocal(state.background);
+      }
+      if (state.style && !selectedStyle) {
+        setSelectedStyle(state.style);
+      }
+    }
+  }, [isHydrated, state.background, state.style]);
+
   // 监听并自动同步到全局 Store，防止跳转丢失数据
   useEffect(() => {
-    setBackground(background);
-    setStyle(selectedStyle);
-  }, [background, selectedStyle, setBackground, setStyle]);
+    if (isHydrated) {
+      setBackground(background);
+      setStyle(selectedStyle);
+    }
+  }, [background, selectedStyle, setBackground, setStyle, isHydrated]);
+
+  if (!isHydrated) return null;
 
   const handleCancelEnhance = () => {
     enhanceAbortController.current?.abort();
@@ -114,6 +129,7 @@ export default function BackgroundPage() {
   };
 
   const canProceed = background.trim().length > 0;
+  const isLocked = state.isFinished;
 
   return (
     <div className="space-y-8 relative z-10">
@@ -146,10 +162,11 @@ export default function BackgroundPage() {
             <span className="badge-retro">{background.length} 字</span>
           </div>
           <textarea
-            className="textarea-retro min-h-[180px] text-base leading-relaxed"
+            className={`textarea-retro min-h-[180px] text-base leading-relaxed ${isLocked ? "opacity-70 cursor-not-allowed bg-gray-50/50" : ""}`}
             placeholder="例如：在一个魔法与科技共存的世界里，少年小明意外获得了穿越时空的能力。他必须在混乱的时间线中找到失散的家人，同时躲避追捕他的神秘组织..."
             value={background}
             onChange={(e) => setBackgroundLocal(e.target.value)}
+            disabled={isLocked || isEnhancing}
           />
           <div className="flex justify-end gap-3">
             {/* 随机生成按钮：仅在有风格且无内容时显示 */}
@@ -157,8 +174,8 @@ export default function BackgroundPage() {
               <div className="flex gap-2">
                 <button
                   onClick={handleRandomGenerate}
-                  disabled={isGenerating}
-                  className="flex items-center gap-2 px-4 py-2 font-mono text-sm uppercase tracking-wider border-2 border-accent bg-accent text-ink hover:bg-accent/80 transition-all duration-200 cursor-pointer shadow-retro-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none disabled:opacity-50"
+                  disabled={isGenerating || isLocked}
+                  className="flex items-center gap-2 px-4 py-2 font-mono text-sm uppercase tracking-wider border-2 border-accent bg-accent text-ink hover:bg-accent/80 transition-all duration-200 cursor-pointer shadow-retro-sm active:translate-x-[1px] active:translate-y-[1px] active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isGenerating ? (
                     <>
@@ -178,7 +195,7 @@ export default function BackgroundPage() {
             <div className="flex gap-2">
               <button
                 onClick={handleEnhance}
-                disabled={!background.trim() || isEnhancing}
+                disabled={!background.trim() || isEnhancing || isLocked}
                 className={`
                   flex items-center gap-2 px-4 py-2 font-mono text-sm uppercase tracking-wider
                   border-2 transition-all duration-200 cursor-pointer
@@ -226,16 +243,18 @@ export default function BackgroundPage() {
                 <button
                   key={style.id}
                   onClick={() =>
-                    setSelectedStyle(isSelected ? "" : style.id)
+                    !isLocked && setSelectedStyle(isSelected ? "" : style.id)
                   }
+                  disabled={isLocked}
                   className={`
                     flex items-center gap-3 px-4 py-4
                     font-body font-medium text-left
-                    border-3 transition-all duration-150 cursor-pointer
+                    border-3 transition-all duration-150
                     ${isSelected
                       ? "bg-accent text-ink border-ink shadow-retro translate-x-0 translate-y-0"
                       : "bg-cream text-ink border-ink/30 hover:border-ink hover:shadow-retro hover:-translate-x-[2px] hover:-translate-y-[2px]"
                     }
+                    ${isLocked ? "opacity-70 cursor-not-allowed grayscale-[0.5]" : "cursor-pointer"}
                   `}
                 >
                   <span className="text-2xl">{style.icon}</span>
@@ -250,9 +269,9 @@ export default function BackgroundPage() {
       {/* 底部操作栏 */}
       <div className="flex items-center justify-between">
         <div className="retro-card-dark px-4 py-3 flex items-center gap-3">
-          <span className="text-accent text-xl">☞</span>
+          <span className="text-accent text-xl">{isLocked ? "🔒" : "☞"}</span>
           <p className="text-sm text-cream/80 font-mono">
-            背景越详细，漫画越精彩
+            {isLocked ? "故事已完结，背景已锁定" : "背景越详细，漫画越精彩"}
           </p>
         </div>
 

@@ -11,6 +11,8 @@ interface StoryTimelineProps {
     onSelectSuggestion: (suggestion: string) => void;
     isSuggesting?: boolean;
     onRefreshSuggestions: () => void;
+    onSuggestFirstStep: () => void;
+    isFinished?: boolean;
 }
 
 export default function StoryTimeline({
@@ -20,7 +22,9 @@ export default function StoryTimeline({
     suggestions,
     onSelectSuggestion,
     isSuggesting,
-    onRefreshSuggestions
+    onRefreshSuggestions,
+    onSuggestFirstStep,
+    isFinished
 }: StoryTimelineProps) {
     const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -49,12 +53,26 @@ export default function StoryTimeline({
                     </p>
                 </div>
 
-                <div className="stripe-decoration w-full max-w-md mx-auto opacity-50" />
+                <div className="stripe-decoration w-full max-w-md mx-auto" />
 
-                <div className="flex justify-center">
-                    <div className="w-20 h-20 border-3 border-cream/20 rounded-full flex items-center justify-center">
-                        <span className="text-4xl">✨</span>
-                    </div>
+                <div className="flex flex-col items-center gap-6">
+                    <button
+                        onClick={onSuggestFirstStep}
+                        disabled={isSuggesting}
+                        className="btn-retro flex items-center gap-3 px-10 py-4 text-xl"
+                    >
+                        {isSuggesting ? (
+                            <>
+                                <span className="animate-spin text-2xl">◐</span>
+                                <span>策划中...</span>
+                            </>
+                        ) : (
+                            <>
+                                <span className="text-2xl">✦</span>
+                                <span>生成第一页</span>
+                            </>
+                        )}
+                    </button>
                 </div>
             </div>
         );
@@ -68,6 +86,7 @@ export default function StoryTimeline({
                     data={story}
                     onRegenerate={onRegenerate}
                     onFork={onFork}
+                    isFinished={isFinished}
                 />
             ))}
 

@@ -54,56 +54,7 @@ export default function MangaGenerator() {
         }
     }, [state.background, state.style, state.episodes, state.characters, state.suggestions?.length, isSuggesting, setSuggestions]);
 
-    // 初始进入或章节增加时自动获取建议（如果还没有的话）
-    useEffect(() => {
-        if (state.background && !isProcessing && state.episodes.length > 0 && (state.suggestions?.length ?? 0) === 0) {
-            fetchSuggestions();
-        }
-    }, [state.episodes.length, isProcessing, state.background, state.suggestions?.length, fetchSuggestions]);
-
-    const handleSelectSuggestion = (suggestion: string) => {
-        setPendingInput(suggestion);
-        // 重置一下，确保同一选项点两次也能触发 InputArea 的 effect
-        setTimeout(() => setPendingInput(undefined), 100);
-    };
-
-    const handleRefreshSuggestions = () => {
-        clearSuggestions(); // 清空现有建议
-        fetchSuggestions(); // 重新获取
-    };
-
-    const prepareGenerationData = (currentIndex: number) => {
-        const characters: GeminiCharacter[] | undefined = state.characters.length > 0
-            ? state.characters
-                .filter(c => c.imageUrl)
-                .map(c => ({
-                    name: c.name,
-                    sheetImage: c.imageUrl!,
-                    description: c.description
-                }))
-            : undefined;
-
-        const previousPage = currentIndex > 0
-            ? (() => {
-                const previousEpisodes = state.episodes.slice(0, currentIndex);
-                const lastCompleteEpisode = [...previousEpisodes]
-                    .reverse()
-                    .find(e => e.status === "complete" && e.images.length > 0);
-
-                if (lastCompleteEpisode) {
-                    return {
-                        generatedImage: lastCompleteEpisode.images[0],
-                        sceneDescription: lastCompleteEpisode.outline
-                    };
-                }
-                return undefined;
-            })()
-            : undefined;
-
-        return { characters, previousPage };
-    };
-
-    const handleGenerate = async (prompt: string) => {
+    const handleGenerate = useCallback(async (prompt: string) => {
         setIsProcessing(true);
         clearSuggestions();
 
@@ -162,7 +113,84 @@ export default function MangaGenerator() {
             setIsProcessing(false);
             abortControllerRef.current = null;
         }
-    };
+    }, [addEpisode, clearSuggestions, state.episodes.length, state.characters, state.style, updateEpisode]);
+
+    const handleSuggestFirstStep = useCallback(async () => {
+        if (state.episodes.length > 0 || isSuggesting) return;
+
+        setIsSuggesting(true);
+        try {
+            const response = await fetch("/api/manga/suggest-first-episode", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    background: state.background,
+                    style: state.style,
+                    characters: state.characters.map(c => ({ name: c.name, description: c.description }))
+                }),
+            });
+
+            const data = await response.json();
+            if (data.outline) {
+                // 使用生成的第一页脚本进行生成
+                handleGenerate(data.outline);
+            }
+        } catch (error) {
+            console.error("生成起始章节脚本失败:", error);
+        } finally {
+            setIsSuggesting(false);
+        }
+    }, [state.background, state.style, state.characters, state.episodes.length, isSuggesting, handleGenerate]);
+
+    // 修改建议同步逻辑：不仅在 episodes.length 改变时触发，还确保在没有任何 episodes 且处于空状态时也可以通过某种方式启用
+    useEffect(() => {
+        // 只有当有背景、非处理中、有章节、且当前没有建议时，才自动获取建议
+        if (state.background && !isProcessing && state.episodes.length > 0 && (state.suggestions?.length ?? 0) === 0) {
+            fetchSuggestions();
+        }
+    }, [state.episodes.length, isProcessing, state.background, fetchSuggestions]);
+
+    const handleSelectSuggestion = useCallback((suggestion: string) => {
+        setPendingInput(suggestion);
+        // 重置一下，确保同一选项点两次也能触发 InputArea 的 effect
+        setTimeout(() => setPendingInput(undefined), 100);
+    }, []);
+
+    const handleRefreshSuggestions = useCallback(() => {
+        clearSuggestions(); // 清空现有建议
+        fetchSuggestions(); // 重新获取
+    }, [clearSuggestions, fetchSuggestions]);
+
+    const prepareGenerationData = useCallback((currentIndex: number) => {
+        const characters: GeminiCharacter[] | undefined = state.characters.length > 0
+            ? state.characters
+                .filter(c => c.imageUrl)
+                .map(c => ({
+                    name: c.name,
+                    sheetImage: c.imageUrl!,
+                    description: c.description
+                }))
+            : undefined;
+
+        const previousPage = currentIndex > 0
+            ? (() => {
+                const previousEpisodes = state.episodes.slice(0, currentIndex);
+                const lastCompleteEpisode = [...previousEpisodes]
+                    .reverse()
+                    .find(e => e.status === "complete" && e.images.length > 0);
+
+                if (lastCompleteEpisode) {
+                    return {
+                        generatedImage: lastCompleteEpisode.images[0],
+                        sceneDescription: lastCompleteEpisode.outline
+                    };
+                }
+                return undefined;
+            })()
+            : undefined;
+
+        return { characters, previousPage };
+    }, [state.characters, state.episodes]);
 
     const handleRegenerate = async (id: string) => {
         const episodeToRegen = state.episodes.find(e => e.id === id);
@@ -276,6 +304,8 @@ export default function MangaGenerator() {
                 onSelectSuggestion={handleSelectSuggestion}
                 isSuggesting={isSuggesting}
                 onRefreshSuggestions={handleRefreshSuggestions}
+                onSuggestFirstStep={handleSuggestFirstStep}
+                isFinished={state.isFinished}
             />
 
             {!state.isFinished ? (

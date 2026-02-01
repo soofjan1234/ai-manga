@@ -29,16 +29,20 @@ const createEmptyDraft = (): CharacterDraft => ({
 
 export default function CharactersPage() {
   const router = useRouter();
-  const { state, setCharacters, setCharacterDrafts } = useStory();
+  const { state, setCharacters, setCharacterDrafts, updateCharacterDraft, isHydrated } = useStory();
   const drafts = state.characterDrafts;
 
   const [isSuggestingAll, setIsSuggestingAll] = useState(false);
 
+  const isLocked = state.isFinished;
+
   // 监听并自动同步到全局 Store，防止跳转丢失数据
   useEffect(() => {
+    if (!isHydrated) return;
+
     // If characterDrafts is empty, initialize it with one empty draft
     // This ensures there's always at least one draft to start with
-    if (drafts.length === 0) {
+    if (drafts.length === 0 && !isLocked) {
       setCharacterDrafts([createEmptyDraft()]);
     }
 
@@ -51,12 +55,13 @@ export default function CharactersPage() {
         imageUrl: d.imageUrl || undefined,
       }));
     setCharacters(validCharacters);
-  }, [drafts, setCharacters, setCharacterDrafts]);
+  }, [drafts, setCharacters, setCharacterDrafts, isHydrated]);
+
+  if (!isHydrated) return null;
 
   // 更新单个草稿
   const updateDraft = (id: string, updates: Partial<CharacterDraft>) => {
-    const newDrafts = drafts.map((d) => (d.id === id ? { ...d, ...updates } : d));
-    setCharacterDrafts(newDrafts);
+    updateCharacterDraft(id, updates);
   };
 
   // 添加新角色
@@ -225,32 +230,34 @@ export default function CharactersPage() {
       <div className="stripe-decoration w-full max-w-md mx-auto" />
 
       {/* 操作按钮 */}
-      <div className="flex flex-wrap justify-center gap-4">
-        <button
-          onClick={handleSuggestAll}
-          disabled={isSuggestingAll}
-          className="btn-retro flex items-center gap-2"
-        >
-          {isSuggestingAll ? (
-            <>
-              <span className="animate-spin">◐</span>
-              分析中...
-            </>
-          ) : (
-            <>
-              <span>✦</span>
-              AI 建议角色
-            </>
-          )}
-        </button>
-        <button
-          onClick={addDraft}
-          className="btn-retro-outline flex items-center gap-2"
-        >
-          <span>+</span>
-          手动添加
-        </button>
-      </div>
+      {!isLocked && (
+        <div className="flex flex-wrap justify-center gap-4">
+          <button
+            onClick={handleSuggestAll}
+            disabled={isSuggestingAll}
+            className="btn-retro flex items-center gap-2"
+          >
+            {isSuggestingAll ? (
+              <>
+                <span className="animate-spin">◐</span>
+                分析中...
+              </>
+            ) : (
+              <>
+                <span>✦</span>
+                AI 建议角色
+              </>
+            )}
+          </button>
+          <button
+            onClick={addDraft}
+            className="btn-retro-outline flex items-center gap-2"
+          >
+            <span>+</span>
+            手动添加
+          </button>
+        </div>
+      )}
 
       {/* 角色卡片列表 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -269,15 +276,18 @@ export default function CharactersPage() {
                     updateDraft(draft.id, { name: e.target.value })
                   }
                   placeholder="角色名称"
-                  className="bg-transparent border-b-2 border-cream/50 text-cream font-heading font-bold text-lg px-1 focus:outline-none focus:border-accent w-32"
+                  disabled={isLocked}
+                  className={`bg-transparent border-b-2 border-cream/50 text-cream font-heading font-bold text-lg px-1 focus:outline-none focus:border-accent w-32 ${isLocked ? "cursor-not-allowed opacity-80" : ""}`}
                 />
               </div>
-              <button
-                onClick={() => removeDraft(draft.id)}
-                className="px-3 py-1 text-accent hover:bg-accent hover:text-ink transition-colors text-sm font-mono uppercase cursor-pointer"
-              >
-                ✕
-              </button>
+              {!isLocked && (
+                <button
+                  onClick={() => removeDraft(draft.id)}
+                  className="px-3 py-1 text-accent hover:bg-accent hover:text-ink transition-colors text-sm font-mono uppercase cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
             </div>
 
             {/* 内容 */}
@@ -292,21 +302,27 @@ export default function CharactersPage() {
                   onChange={(e) =>
                     updateDraft(draft.id, { description: e.target.value })
                   }
+                  disabled={isLocked}
                   placeholder="例如：18岁少年，黑色短发，穿着蓝色校服外套，眼神坚定，性格开朗..."
-                  className="textarea-retro min-h-[100px] text-sm"
+                  className={`textarea-retro min-h-[100px] text-sm ${isLocked ? "cursor-not-allowed opacity-80" : ""}`}
                 />
               </div>
 
               {/* 图像区域 */}
-              {draft.imageUrl ? (
+              {/* 图像区域 */}
+              {draft.imageUrl || draft.isGenerating ? (
                 <div className="space-y-3">
-                  <div className="relative aspect-square bg-cream-dark border-3 border-ink overflow-hidden">
-                    <img
-                      src={draft.imageUrl}
-                      alt={draft.name}
-                      className="w-full h-full object-contain"
-                    />
-                    {draft.isGenerating && (
+                  <div className="relative aspect-square bg-cream-dark border-3 border-ink overflow-hidden flex items-center justify-center">
+                    {draft.imageUrl ? (
+                      <img
+                        src={draft.imageUrl}
+                        alt={draft.name}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-4xl animate-spin text-ink/20">◐</span>
+                    )}
+                    {draft.isGenerating && draft.imageUrl && (
                       <div className="absolute inset-0 bg-cream/80 flex items-center justify-center">
                         <span className="text-4xl animate-spin">◐</span>
                       </div>
@@ -316,11 +332,11 @@ export default function CharactersPage() {
                     {draft.isGenerating ? (
                       <button
                         onClick={() => handleCancel(draft.id)}
-                        className="flex-1 px-3 py-2 bg-red-600 text-cream border-2 border-ink font-mono text-xs uppercase hover:bg-red-700 transition-colors cursor-pointer"
+                        className="flex-1 px-3 py-2 bg-ink text-cream border-2 border-ink font-mono text-xs uppercase hover:bg-ink/80 transition-colors cursor-pointer"
                       >
                         ✕ 取消
                       </button>
-                    ) : (
+                    ) : !isLocked && (
                       <button
                         onClick={() => handleGenerate(draft.id)}
                         className="flex-1 px-3 py-2 bg-ink text-cream border-2 border-ink font-mono text-xs uppercase hover:bg-ink/80 transition-colors cursor-pointer"
@@ -332,31 +348,21 @@ export default function CharactersPage() {
                 </div>
               ) : (
                 <div className="relative group">
-                  {draft.isGenerating ? (
-                    <button
-                      onClick={() => handleCancel(draft.id)}
-                      className="w-full aspect-[4/3] border-3 border-dashed border-red-300 bg-red-50 flex flex-col items-center justify-center gap-2 font-mono text-sm uppercase transition-all cursor-pointer hover:bg-red-100 ring-2 ring-red-500 ring-offset-2"
-                    >
-                      <span className="text-3xl text-red-500">✕</span>
-                      <span className="text-red-500 font-bold">取消生成</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleGenerate(draft.id)}
-                      disabled={!draft.name || !draft.description}
-                      className={`
-                            w-full aspect-[4/3] border-3 border-dashed flex flex-col items-center justify-center gap-2
-                            font-mono text-sm uppercase transition-all cursor-pointer
-                            ${draft.name && draft.description
-                          ? "border-ink hover:border-accent hover:bg-accent/10"
-                          : "border-ink/20 text-ink/30 cursor-not-allowed"
-                        }
-                          `}
-                    >
-                      <span className="text-3xl">🎨</span>
-                      <span>生成角色图像</span>
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleGenerate(draft.id)}
+                    disabled={!draft.name || !draft.description}
+                    className={`
+                          w-full aspect-square border-3 border-dashed flex flex-col items-center justify-center gap-2
+                          font-mono text-sm uppercase transition-all cursor-pointer
+                          ${draft.name && draft.description
+                        ? "border-ink hover:border-accent hover:bg-accent/10"
+                        : "border-ink/20 text-ink/30 cursor-not-allowed"
+                      }
+                        `}
+                  >
+                    <span className="text-3xl">🎨</span>
+                    <span>生成角色图像</span>
+                  </button>
                 </div>
               )}
 
@@ -371,13 +377,15 @@ export default function CharactersPage() {
         ))}
 
         {/* 添加角色卡片 */}
-        <button
-          onClick={addDraft}
-          className="retro-card border-3 border-dashed border-ink/30 min-h-[300px] flex flex-col items-center justify-center gap-3 hover:border-ink hover:bg-cream-dark transition-all cursor-pointer"
-        >
-          <span className="text-5xl text-ink/30">+</span>
-          <span className="font-mono uppercase text-ink/50">添加角色</span>
-        </button>
+        {!isLocked && (
+          <button
+            onClick={addDraft}
+            className="retro-card border-3 border-dashed border-ink/30 min-h-[300px] flex flex-col items-center justify-center gap-3 hover:border-ink hover:bg-cream-dark transition-all cursor-pointer"
+          >
+            <span className="text-5xl text-ink/30">+</span>
+            <span className="font-mono uppercase text-ink/50">添加角色</span>
+          </button>
+        )}
       </div>
 
       {/* 底部操作栏 */}
@@ -391,9 +399,9 @@ export default function CharactersPage() {
         </button>
 
         <div className="retro-card-dark px-4 py-3 flex items-center gap-3">
-          <span className="text-accent text-xl">☞</span>
+          <span className="text-accent text-xl">{isLocked ? "🔒" : "☞"}</span>
           <p className="text-sm text-cream/80 font-mono">
-            已创建 {validCount} 个角色
+            {isLocked ? "故事已完结，角色已锁定" : `已创建 ${validCount} 个角色`}
           </p>
         </div>
 

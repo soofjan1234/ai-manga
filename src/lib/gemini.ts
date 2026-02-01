@@ -530,3 +530,44 @@ ${characters && characters.length > 0 ? `**主要角色：**\n${characters.map(c
     return [];
   }
 }
+
+/**
+ * 专门为漫画第一页生成开端剧情建议
+ * 重点在于引入世界观、建立氛围并介绍核心角色
+ */
+export async function suggestFirstEpisode(
+  background: string,
+  style: string = "",
+  characters?: { name: string; description?: string }[]
+): Promise<string> {
+  const prompt = `
+你是一位顶级的漫画编剧。请根据以下背景和角色设定，为漫画的【第一页】创作一个极具冲击力的开场剧情脚本。
+
+**故事背景：**
+${background}
+
+**艺术风格：** ${style || "通用"}
+
+**核心角色：**
+${characters && characters.length > 0 ? characters.map(c => `- ${c.name}: ${c.description || "无详细描述"}`).join("\n") : "暂无具体角色文字描述"}
+
+**创作任务：**
+请撰写一段适合作为漫画第一页的大纲脚本。
+
+**脚本要求：**
+1. **世界观引入：** 必须包含对故事环境、独特设定或世界氛围的视觉化描述，让读者一眼进入这个世界。
+2. **核心角色登场：** 安排 1-2 名核心角色在一个关键场景中亮相，带出他们的初印象或当前的紧迫处境。
+3. **分镜感：** 描述应具有强烈的画面感和分镜节奏（例如：远景展示城市 -> 中景角色动作 -> 特写神态）。
+4. **叙事钩子：** 在结尾留下一个悬念或转折，引导读者继续看下一页。
+5. **简洁明了：** 字数控制在 100 字左右，直接输出脚本内容，不要包含任何标题、编号或多余的解释文字。
+
+**第一页开场大纲脚本：**
+  `.trim();
+
+  const response = await getAiClient().models.generateContent({
+    model: getTextModel(),
+    contents: prompt,
+  });
+
+  return response.text || "";
+}
