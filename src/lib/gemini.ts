@@ -418,6 +418,33 @@ ${background}
 }
 
 /**
+ * 随机生成一个故事背景
+ */
+export async function generateBackground(style: string = ""): Promise<string> {
+  const prompt = `
+你是一位极其富有想象力的漫画编剧。请根据用户选择的风格，随机生成一个引人入胜、极具画面感的漫画故事背景设定。
+
+**要求的风格：** ${style || "通用"}
+
+**生成要求：**
+1. **创意独特：** 避免陈词滥调，给出一个让人眼前一亮的世界观设定或开篇冲突。
+2. **画面感极强：** 描述环境、氛围、关键符号或角色的初次登场状态。
+3. **字数控制：** 保持在 100-150 字左右。
+4. **适合展开：** 背景中应当埋下可以继续发展的钩子（Hook）。
+5. **直接输出：** 只输出生成的背景内容，不要包含任何多余的解释、回复或标题。
+
+**生成的故事背景设定：**
+  `.trim();
+
+  const response = await getAiClient().models.generateContent({
+    model: getTextModel(),
+    contents: prompt,
+  });
+
+  return response.text || "";
+}
+
+/**
  * 润色漫画大纲/分镜脚本
  */
 export async function polishOutline(
@@ -447,4 +474,56 @@ ${outline}
   });
 
   return response.text || outline;
+}
+
+/**
+ * 根据故事背景和当前进度建议后续剧情选项
+ */
+export async function suggestStoryOptions(
+  background: string,
+  style: string = "",
+  lastEpisodeOutline?: string,
+  characters?: { name: string; description?: string }[]
+): Promise<string[]> {
+  const prompt = `
+你是一位专业的互动漫剧编剧。请根据以下背景和故事进度，为用户提供 3 个简短的后续剧情发展选项。
+
+**背景设定：**
+${background}
+
+**艺术风格：** ${style || "通用"}
+
+${lastEpisodeOutline ? `**当前进度（上一话内容）：**\n${lastEpisodeOutline}` : "**当前进度：** 故事刚刚开始。"}
+
+${characters && characters.length > 0 ? `**主要角色：**\n${characters.map(c => `- ${c.name}: ${c.description || "无详细描述"}`).join("\n")}` : ""}
+
+**要求：**
+1. **氛围一致性：** 必须严密契合当前章节的氛围（如治愈、悬疑、热血等），避免出现画风突变的跳跃感。
+2. **逻辑自然：** 选项应是当前场景的自然延续，基于角色性格和物理环境做出合理反应。
+3. **路径差异：** 3 个分支应提供不同的剧情侧重（例如：一个侧重于角色间的细腻互动，一个侧重于探索周围环境细节，一个侧重于推进核心事件进度）。
+4. **简短有力：** 每个选项控制在 20 字以内，清晰描述下一步的动作或场景。
+5. **直接输出：** 仅输出一个 JSON 字符串数组，不要包含任何编号、解释或引号外的文字。
+
+**输出格式示例：**
+["主角小心翼翼地走进山洞，发现洞壁闪烁着晶石的光芒。","主角在山洞口犹豫片刻，决定先在附近寻找求生工具。","主角正要进入山洞，远处传来一阵空灵而熟悉的呼唤声。"]
+
+**建议选项：**
+  `.trim();
+
+  const response = await getAiClient().models.generateContent({
+    model: getTextModel(),
+    contents: prompt,
+  });
+
+  try {
+    const text = response.text || '';
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    return [];
+  } catch (e) {
+    console.error("解析剧情建议失败:", e);
+    return [];
+  }
 }

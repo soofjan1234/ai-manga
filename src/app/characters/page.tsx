@@ -374,7 +374,7 @@ export default function CharactersPage() {
 
       {/* 底部装饰 */}
       <div className="flex justify-center gap-2">
-        {[1, 2, 3, 4, 5].map((i) => (
+        {[1, 2, 3].map((i) => (
           <div
             key={i}
             className={`w-3 h-3 border-2 border-cream/30 ${

@@ -4,13 +4,22 @@ import { useStory } from "@/lib/store";
 interface InputAreaProps {
     onGenerate: (prompt: string) => void;
     isLoading: boolean;
+    externalInput?: string;
 }
 
-export default function InputArea({ onGenerate, isLoading }: InputAreaProps) {
+export default function InputArea({ onGenerate, isLoading, externalInput }: InputAreaProps) {
     const { state } = useStory();
     const [input, setInput] = useState("");
     const [isPolishing, setIsPolishing] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // 同步外部传入的输入（例如：点击建议选项）
+    useEffect(() => {
+        if (externalInput) {
+            setInput(externalInput);
+            textareaRef.current?.focus();
+        }
+    }, [externalInput]);
 
     const handleSubmit = () => {
         if (!input.trim() || isLoading || isPolishing) return;
@@ -24,6 +33,7 @@ export default function InputArea({ onGenerate, isLoading }: InputAreaProps) {
 
     const handlePolish = async () => {
         if (!input.trim() || isLoading || isPolishing) return;
+
         setIsPolishing(true);
         try {
             const response = await fetch("/api/manga/polish", {
@@ -88,7 +98,7 @@ export default function InputArea({ onGenerate, isLoading }: InputAreaProps) {
 
                 {/* AI 润色按钮 */}
                 <button
-                    onClick={handlePolish}
+                    onClick={() => handlePolish()}
                     disabled={isActionDisabled}
                     className={`
                         h-[52px] px-4 flex items-center justify-center gap-2
